@@ -67,14 +67,6 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
       <div
         className="rounded-[4px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] border border-stone-200 overflow-hidden relative transition-transform duration-500 bg-white/80 backdrop-blur-md"
       >
-        {/* Go Back Button (Top Left) */}
-        <a
-          href="https://flormontana.my.canva.site/joshua-jasmin/page-2"
-          className="absolute top-4 left-4 z-30 inline-flex items-center gap-2 text-stone-600 hover:text-stone-800 bg-stone-200/80 hover:bg-stone-300/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-serif transition-all duration-300 shadow-sm"
-        >
-          <ArrowLeft size={14} /> <span>GO back</span>
-        </a>
-
         {/* Cover Photo - Banner Style */}
         {coverImage && (
           <div className="w-full h-48 md:h-56 overflow-hidden relative border-b border-stone-100">
