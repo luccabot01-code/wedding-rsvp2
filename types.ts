@@ -3,6 +3,7 @@ export interface Host {
   id: string;
   slug: string;        // e.g. 'mary-and-john'
   couple_name: string; // e.g. 'Mary & John'
+  cover_image_url?: string;
   created_at?: string;
 }
 
@@ -12,8 +13,8 @@ export interface RsvpResponse {
   guest_name: string;
   guest_email: string;
   guest_phone?: string;
-  attendance: 'yes' | 'no';
-  guests_count: number;
+  attending: boolean;
+  party_size: number;
   message?: string;
   created_at: string;
 }

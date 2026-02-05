@@ -9,115 +9,129 @@ import { CheckCircle2, EyeOff } from 'lucide-react';
 import { Button } from './components/ui/Button';
 import { getSupabase } from './services/supabase';
 import { applyTheme } from './utils/themes';
+import { resolveBackgroundStyle } from './utils/backgrounds';
+import { AdminLock } from './components/AdminLock';
 
 const App: React.FC = () => {
-  // Synchronous State Initialization
-  const [view, setView] = (() => {
+  // Determine initial routing synchronously to prevent flicker
+  const getInitialRoute = () => {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
-    let initialView: ViewState = 'setup';
 
-    // 1. Dashboard
+    // 1. Path-based Routing
     if (path.startsWith('/dashboard/')) {
       const slug = path.split('/dashboard/')[1];
-      if (slug) return useState<ViewState>('dashboard');
+      if (slug) return { view: 'dashboard' as ViewState, slug: decodeURIComponent(slug) };
     }
 
-    // 2. RSVP Specific
-    if (path.endsWith('/rsvp')) {
-      return useState<ViewState>('form');
-    }
-
-    // 3. Main Landing / Slug
-    const pathParts = path.split('/').filter(Boolean);
-    if (pathParts.length === 1 && pathParts[0] !== 'assets' && pathParts[0] !== 'favicon.ico') {
-      return useState<ViewState>('form');
-    }
-
-    // 4. Query Params
-    if (params.get('dashboard')) return useState<ViewState>('dashboard');
-    if (params.get('rsvp')) return useState<ViewState>('form');
-    if (params.get('setup')) return useState<ViewState>('link');
-
-    // 5. Default Root -> Redirect logic handles this, but for INIT we default to:
-    // Actually, for the DEMO, if it's root '/', we want 'form' immediately too.
-    if (path === '/' && !params.toString()) {
-      return useState<ViewState>('form');
-    }
-
-    return useState<ViewState>('setup');
-  })();
-
-  const [coupleSlug, setCoupleSlug] = (() => {
-    const path = window.location.pathname;
-    const params = new URLSearchParams(window.location.search);
-
-    if (path.startsWith('/dashboard/') && path.split('/dashboard/')[1]) {
-      return useState(decodeURIComponent(path.split('/dashboard/')[1]));
-    }
-
-    // RSVP path logic for initial state is complex, simplifying for demo:
-    // If we detected 'form' view above from path parts, we should try to extract slug here.
-    const pathParts = path.split('/').filter(Boolean);
-    if (pathParts.length === 1 && pathParts[0] !== 'assets') {
-      return useState(decodeURIComponent(pathParts[0]));
-    }
     if (path.endsWith('/rsvp')) {
       const parts = path.split('/');
-      if (parts.length >= 3) return useState(decodeURIComponent(parts[parts.length - 2]));
+      if (parts.length >= 3) {
+        const slug = parts[parts.length - 2];
+        if (slug) return { view: 'form' as ViewState, slug: decodeURIComponent(slug) };
+      }
     }
 
-    if (params.get('dashboard')) return useState(params.get('dashboard') || '');
-    if (params.get('rsvp')) return useState(params.get('rsvp') || '');
-    if (params.get('setup')) return useState(params.get('setup') || '');
-
-    // DEMO Root Fallback
-    if (path === '/' && !params.toString()) {
-      return useState('mary&john');
+    const pathParts = path.split('/').filter(Boolean);
+    if (pathParts.length === 1 && pathParts[0] !== 'assets' && pathParts[0] !== 'favicon.ico') {
+      return { view: 'form' as ViewState, slug: decodeURIComponent(pathParts[0]) };
     }
 
-    return useState('');
-  })();
+    // 2. Query Parameter Fallback
+    if (params.get('dashboard')) {
+      return { view: 'dashboard' as ViewState, slug: params.get('dashboard') || '' };
+    } else if (params.get('rsvp')) {
+      return { view: 'form' as ViewState, slug: params.get('rsvp') || '' };
+    } else if (params.get('setup') || path === '/' || path === '/index.html') {
+      return { view: 'setup' as ViewState, slug: '' };
+    }
 
-  const [coupleName, setCoupleName] = useState<string>(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('name')) return decodeURIComponent(params.get('name')!);
+    return { view: 'setup' as ViewState, slug: '' };
+  };
 
-    // Demo Root Fallback
-    if (window.location.pathname === '/' && !params.toString()) return 'Mary & John';
-    return '';
-  });
+  const initialRoute = getInitialRoute();
 
+  // State
+  const [view, setView] = useState<ViewState>(initialRoute.view);
+  const [coupleSlug, setCoupleSlug] = useState<string>(initialRoute.slug);
+  const [coupleName, setCoupleName] = useState<string>('');
+  const [backgroundId, setBackgroundId] = useState<string>('linen'); // Default to demo texture
   const [isLoadingName, setIsLoadingName] = useState(true);
-  const [coverImage, setCoverImage] = useState<string | null>('/freepik__talk__37233.png');
+  const [coverImage, setCoverImage] = useState<string | null>(null);
   const [isPreview, setIsPreview] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Routing Effect - simplified to specific updates if needed or browser nav handling
+  // Routing Logic - still needed for browser navigation (back/forward)
   useEffect(() => {
-    // We strictly use this for DEMO root redirect enforcement if needed,
-    // but the state is already set. We just need to ensure URL matches state if it was '/'
-    if (window.location.pathname === '/') {
-      updateHistory('/mary&john');
-    }
+    const handlePopState = () => {
+      const route = getInitialRoute();
+      setView(route.view);
+      setCoupleSlug(route.slug);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // History Helper
-  const updateHistory = (url: string) => {
+  // Fetch Couple Data (Name, Theme, Background)
+  useEffect(() => {
+    if (!coupleSlug) {
+      if (view !== 'setup') { // Only stop loading if we aren't in setup (or setup handles itself)
+        setIsLoadingName(false);
+      }
+      return;
+    }
+
+    const fetchCoupleData = async () => {
+      try {
+        setIsLoadingName(true);
+        const supabase = getSupabase();
+
+        // Fetch host to get name, theme, and background
+        const { data: host, error } = await (supabase
+          .from('wedding_template_couples') as any)
+          .select('couple_name, theme_id, background_id, cover_image_url')
+          .eq('slug', coupleSlug)
+          .single();
+
+        if (error) {
+          console.error('Error fetching couple:', error);
+        }
+
+        if (host) {
+          setCoupleName(host.couple_name);
+          if (host.theme_id) applyTheme(host.theme_id);
+          if (host.background_id) setBackgroundId(host.background_id);
+
+          const url = (host as any).cover_image_url;
+          if (url) setCoverImage(url);
+        }
+
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoadingName(false);
+      }
+    };
+
+    fetchCoupleData();
+  }, [coupleSlug, view]);
+
+  const updateHistory = (newPath: string) => {
     try {
-      window.history.pushState({}, '', url);
+      window.history.pushState({}, '', newPath);
     } catch (e) {
       // Ignore sandbox history errors
     }
   };
 
-  const handleSetupSuccess = (slug: string, name: string) => {
+  const handleSetupSuccess = (slug: string, name: string, bgId: string) => {
     setCoupleSlug(slug);
     setCoupleName(name);
-    // Use query params for immediate feedback in sandbox, 
-    // but LinkShare will show the clean URLs
-    const newUrl = `/?setup=${slug}&name=${encodeURIComponent(name)}`;
-    updateHistory(newUrl);
-    setView('link');
+    setBackgroundId(bgId);
+    setView('dashboard');
+    window.scrollTo(0, 0);
+    updateHistory(`/dashboard/${slug}`); // Directly go to dashboard URL
   };
 
   const handleDashboardNav = () => {
@@ -126,7 +140,7 @@ const App: React.FC = () => {
     setView('dashboard');
   };
 
-  const handleNewEvent = () => {
+  const handleNewForm = () => {
     updateHistory('/');
     setCoupleSlug('');
     setCoupleName('');
@@ -159,52 +173,24 @@ const App: React.FC = () => {
       .join(' ');
   };
 
-  // Fetch Theme
-  useEffect(() => {
-    const fetchThemeAndName = async () => {
-      if (!coupleSlug) return;
-      const supabase = getSupabase();
-      try {
-        const { data, error } = await supabase
-          .from('wedding_template_couples')
-          .select('theme_id, couple_name, cover_image_url')
-          .eq('slug', coupleSlug)
-          .single();
+  const handleCoverUpdate = (url: string) => {
+    setCoverImage(url);
+  };
 
-        if (data) {
-          if (data.theme_id) applyTheme(data.theme_id);
-          if (data.couple_name) setCoupleName(data.couple_name);
-          // DEMO: Keep hardcoded image
-          // if (data.cover_image_url) setCoverImage(data.cover_image_url);
-        } else {
-          // Default or fallback
-          applyTheme('rose');
-        }
-      } catch (e) {
-        console.error("Error fetching data:", e);
-      } finally {
-        setIsLoadingName(false);
-      }
-    };
-    if (coupleSlug) {
-      setIsLoadingName(true);
-      fetchThemeAndName();
-    } else {
-      setIsLoadingName(false);
-    }
-  }, [coupleSlug]);
+  // Background Logic
+  const backgroundStyle = resolveBackgroundStyle(backgroundId);
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 relative">
-      {/* Dynamic Background - Now using theme variables */}
+    <div className="min-h-screen bg-[#fafaf9] text-stone-800 font-sans selection:bg-rose-100 relative">
+      {/* Background Gradient Layer (from demo project) */}
       <div
-        className="fixed inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] via-stone-100 to-stone-200"
+        className="fixed inset-0 z-0"
         style={{
           backgroundImage: `radial-gradient(ellipse at top, var(--color-primary-50), #f5f5f4, #e7e5e4)`
         }}
       />
 
-      {/* Texture Layer */}
+      {/* Texture Layer (from demo-rsvp) */}
       <div
         className="fixed inset-0 z-0 opacity-100 pointer-events-none"
         style={{
@@ -214,35 +200,24 @@ const App: React.FC = () => {
         }}
       />
 
-      {/* Loading Overlay - Prevents FOUC (Flash of Unstyled Color) */}
-      {isLoadingName && coupleSlug && (
-        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-500">
-          <div className="w-16 h-16 relative">
-            <div className="absolute inset-0 border-4 border-stone-100 rounded-full"></div>
-            <div
-              className="absolute inset-0 border-4 border-t-transparent rounded-full animate-spin"
-              style={{ borderColor: 'var(--color-primary-500) transparent transparent transparent' }}
-            ></div>
-          </div>
-          <p className="mt-6 font-serif italic text-stone-400 animate-pulse tracking-widest uppercase text-xs">
-            Honoring the moment...
-          </p>
-        </div>
-      )}
-
       <Petals />
 
-      {/* Main Content Area */}
-      <main className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 md:p-8">
-
-        {/* Header - Only show for Guest Views */}
+      <div className="relative z-10">
+        {/* Header - Only show for Guest Views (RSVP Form / Success) */}
         {(view === 'form' || view === 'success') && (
           <header className="mb-2 text-center animate-fade-in select-none pt-12">
-            <h1 className="font-slight text-7xl md:text-9xl mb-6 drop-shadow-sm text-rose-600 pb-2 leading-relaxed tracking-wider">
+            <h1 className="font-slight text-7xl md:text-9xl mb-6 drop-shadow-sm text-[var(--color-primary-600)] pb-2 leading-relaxed tracking-wider">
               {isLoadingName ? (
                 <span className="opacity-0">Loading</span>
               ) : (
-                getDisplayName()
+                getDisplayName().split('&').map((part, index, arr) => (
+                  <React.Fragment key={index}>
+                    {part}
+                    {index < arr.length - 1 && (
+                      <span className="font-serif italic mx-2 text-[0.8em]" style={{ fontWeight: 300 }}>&</span>
+                    )}
+                  </React.Fragment>
+                ))
               )}
             </h1>
             <p className="font-serif italic text-stone-500 tracking-[0.2em] uppercase text-sm md:text-base">
@@ -251,76 +226,87 @@ const App: React.FC = () => {
           </header>
         )}
 
-        <div className="w-full max-w-6xl">
-          {view === 'setup' && <Setup onSuccess={handleSetupSuccess} />}
+        <main className="container mx-auto px-4 py-8 md:py-12 min-h-[calc(100vh-200px)] flex flex-col items-center justify-center">
+          <div className="w-full max-w-6xl">
+            {view === 'setup' && (
+              isAuthenticated ? (
+                <Setup onSuccess={handleSetupSuccess} />
+              ) : (
+                <AdminLock onUnlock={() => {
+                  setIsAuthenticated(true);
+                  updateHistory('/?setup=true');
+                }} />
+              )
+            )}
 
-          {view === 'link' && (
-            <LinkShare
-              slug={coupleSlug}
-              coupleName={getDisplayName()}
-              onNewForm={handleNewEvent}
-              onDashboard={handleDashboardNav}
-              onPreview={handlePreview}
-            />
-          )}
+            {view === 'link' && (
+              <LinkShare
+                slug={coupleSlug}
+                coupleName={getDisplayName()}
+                onNewForm={handleNewForm}
+                onDashboard={handleDashboardNav}
+                onPreview={handlePreview}
+              />
+            )}
 
-          {view === 'form' && (
-            <>
-              {isPreview && (
-                <div className="fixed top-4 right-4 z-50 animate-fade-in">
-                  <Button
-                    variant="secondary"
-                    onClick={handleClosePreview}
-                    className="shadow-2xl border-2 border-white/50 backdrop-blur-md bg-stone-900/90 text-sm py-2 px-4"
-                  >
-                    <EyeOff size={16} strokeWidth={2} /> Close Preview
-                  </Button>
+            {view === 'form' && (
+              <>
+                {isPreview && (
+                  <div className="fixed top-4 right-4 z-50 animate-fade-in">
+                    <Button
+                      variant="secondary"
+                      onClick={handleClosePreview}
+                      className="shadow-2xl border-2 border-white/50 backdrop-blur-md bg-stone-900/90 text-sm py-2 px-4 flex items-center gap-2"
+                    >
+                      <EyeOff size={16} strokeWidth={2} /> Close Preview
+                    </Button>
+                  </div>
+                )}
+                <RsvpForm
+                  slug={coupleSlug}
+                  coverImage={coverImage}
+                  onSuccess={handleRsvpSuccess}
+                />
+              </>
+            )}
+
+            {view === 'success' && (
+              <div className="text-center animate-slide-up bg-white/90 backdrop-blur-xl p-12 rounded-[2rem] shadow-2xl border border-white/60 max-w-md mx-auto relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[var(--color-primary-300)] via-[var(--color-primary-500)] to-[var(--color-primary-300)]"></div>
+                <div className="w-24 h-24 bg-[var(--color-primary-50)] rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+                  <CheckCircle2 className="w-12 h-12 text-green-500" strokeWidth={1.5} />
                 </div>
-              )}
-              <RsvpForm
+                <h2 className="font-serif text-3xl mb-4 text-stone-800">RSVP Received</h2>
+                <p className="text-stone-600 mb-10 font-sans leading-relaxed text-lg font-light">
+                  Thank you for your response. Your details have been saved.
+                </p>
+
+                {isPreview ? (
+                  <Button variant="outline" onClick={handleClosePreview} className="flex items-center gap-2 mx-auto">
+                    <EyeOff size={16} /> Back to Dashboard
+                  </Button>
+                ) : (
+                  <p className="font-script text-4xl text-[var(--color-primary-500)]">See you there!</p>
+                )}
+              </div>
+            )}
+
+            {view === 'dashboard' && (
+              <Dashboard
                 slug={coupleSlug}
                 coverImage={coverImage}
-                onSuccess={handleRsvpSuccess}
+                onPreview={handlePreview}
+                onCoverUpdate={handleCoverUpdate}
+                backgroundStyle={backgroundStyle}
               />
-            </>
-          )}
+            )}
+          </div>
+        </main>
 
-          {view === 'success' && (
-            <div className="text-center animate-slide-up bg-white/90 backdrop-blur-xl p-12 rounded-[2rem] shadow-2xl border border-white/60 max-w-md mx-auto relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-rose-300 via-rose-500 to-rose-300"></div>
-              <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
-                <CheckCircle2 className="w-12 h-12 text-green-500" strokeWidth={1.5} />
-              </div>
-              <h2 className="font-serif text-3xl mb-4 text-stone-800">RSVP Received</h2>
-              <p className="text-stone-600 mb-10 font-sans leading-relaxed text-lg font-light">
-                Thank you for your response. Your details have been saved.
-              </p>
-
-              {isPreview ? (
-                <Button variant="outline" onClick={handleClosePreview}>
-                  <EyeOff size={16} /> Back to Preview
-                </Button>
-              ) : (
-                <p className="font-script text-4xl text-rose-500">See you there!</p>
-              )}
-            </div>
-          )}
-
-          {view === 'dashboard' && (
-            <Dashboard
-              slug={coupleSlug}
-              coverImage={coverImage}
-              onPreview={handlePreview}
-              onCoverUpdate={setCoverImage}
-            />
-          )}
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="relative z-10 py-6 text-center text-stone-400 text-xs font-bold tracking-widest uppercase opacity-60 hover:opacity-100 transition-opacity">
-        <p></p>
-      </footer>
+        <footer className="py-8 text-center text-stone-400 text-xs font-bold tracking-widest uppercase opacity-60 hover:opacity-100 transition-opacity relative z-20">
+          <p>&copy; {new Date().getFullYear()} Wedding RSVP. All rights reserved.</p>
+        </footer>
+      </div>
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { getSupabase } from '../services/supabase';
 import { Button } from './ui/Button';
-import { Check, X, Users, MessageSquare, Phone, Mail, User, ArrowLeft } from 'lucide-react';
+import { Check, X, Users, MessageSquare, Phone, Mail, User, ArrowLeft, Heart } from 'lucide-react';
 
 interface RsvpFormProps {
   slug: string;
@@ -31,10 +31,25 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
       if (hostError) throw new Error('Couple not found');
 
       // Submit RSVP
-      // DEMO: Simulate DB Call
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Fake delay
+      const attendanceValue = formData.get('attendance');
+      const guestsValue = formData.get('guests');
 
-      // const { error: insertError } = await supabase... (DISABLED)
+      const rsvpData = {
+        couple_id: host.id,
+        guest_name: formData.get('name') as string,
+        guest_email: formData.get('email') as string,
+        guest_phone: formData.get('phone') as string,
+        attending: attendanceValue === 'yes',
+        party_size: attendanceValue === 'yes' ? parseInt(guestsValue as string || '1') : 0,
+        message: formData.get('message') as string,
+        dietary_restrictions: '' // Ensure we pass something or leave null
+      };
+
+      const { error: insertError } = await supabase
+        .from('wedding_template_rsvps')
+        .insert([rsvpData]);
+
+      if (insertError) throw insertError;
 
       onSuccess();
 
@@ -50,21 +65,8 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
     <div className="w-full max-w-lg mx-auto animate-slide-up relative perspective-1000">
       {/* "Paper" Card Effect */}
       <div
-        className="rounded-[4px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] border border-stone-200 overflow-hidden relative transition-transform duration-500 bg-white"
-        style={{
-          backgroundImage: 'linear-gradient(rgba(255, 253, 249, 0.5), rgba(255, 253, 249, 0.5)), url(/bg-texture.png)',
-          backgroundRepeat: 'repeat',
-          backgroundSize: '300px'
-        }}
+        className="rounded-[4px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] border border-stone-200 overflow-hidden relative transition-transform duration-500 bg-white/80 backdrop-blur-md"
       >
-        {/* Go Back Button (Top Left) */}
-        <a
-          href="https://flormontana.my.canva.site/save-the-date/page-2"
-          className="absolute top-4 left-4 z-30 inline-flex items-center gap-2 text-white/90 hover:text-white bg-black/20 hover:bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-serif transition-all duration-300"
-        >
-          <ArrowLeft size={14} /> <span>GO back</span>
-        </a>
-
         {/* Cover Photo - Banner Style */}
         {coverImage && (
           <div className="w-full h-48 md:h-56 overflow-hidden relative border-b border-stone-100">
@@ -86,6 +88,25 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
           <div className="text-center mb-10">
             <p className="font-script text-4xl mb-4 drop-shadow-sm" style={{ color: 'var(--color-primary-600)' }}>Please Respond</p>
             <h1 className="font-serif text-5xl text-stone-800 uppercase tracking-[0.2em] font-light">RSVP</h1>
+
+            {/* Wedding Date with Heart */}
+            <div className="flex items-center justify-center gap-3 mt-8">
+              <div className="h-[1px] w-8 bg-stone-300"></div>
+              <Heart
+                size={16}
+                className="animate-pulse"
+                style={{ color: 'var(--color-primary-400)', fill: 'var(--color-primary-200)' }}
+              />
+              <div className="h-[1px] w-8 bg-stone-300"></div>
+            </div>
+            <p className="mt-4 text-stone-500 font-serif text-lg tracking-wider">
+              <span className="font-semibold" style={{ color: 'var(--color-primary-600)' }}>12</span>
+              <span className="mx-2 text-stone-300">|</span>
+              <span className="uppercase text-sm">September</span>
+              <span className="mx-2 text-stone-300">|</span>
+              <span className="font-semibold" style={{ color: 'var(--color-primary-600)' }}>2026</span>
+            </p>
+
             <div className="flex items-center justify-center gap-4 mt-6 opacity-40">
               <div className="h-[1px] w-12 bg-stone-400"></div>
               <div className="w-2 h-2 rotate-45 border border-stone-400"></div>
@@ -101,7 +122,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
               <input
                 name="name"
                 required
-                className="w-full bg-transparent border-b border-stone-300 focus:border-rose-500 outline-none py-3 text-2xl text-stone-800 transition-colors placeholder-stone-500 font-serif italic"
+                className="w-full bg-transparent border-b border-stone-300 focus:border-[var(--color-primary-500)] outline-none py-3 text-2xl text-stone-800 transition-colors placeholder-stone-500 font-serif italic"
                 placeholder="Name and Surname"
               />
             </div>
@@ -115,7 +136,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
                   type="email"
                   name="email"
                   required
-                  className="w-full bg-transparent border-b border-stone-300 focus:border-rose-500 outline-none py-2 text-lg text-stone-800 transition-colors placeholder-stone-500"
+                  className="w-full bg-transparent border-b border-stone-300 focus:border-[var(--color-primary-500)] outline-none py-2 text-lg text-stone-800 transition-colors placeholder-stone-500"
                   placeholder="example@email.com"
                 />
               </div>
@@ -126,7 +147,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
                 <input
                   type="tel"
                   name="phone"
-                  className="w-full bg-transparent border-b border-stone-300 focus:border-rose-500 outline-none py-2 text-lg text-stone-800 transition-colors placeholder-stone-500"
+                  className="w-full bg-transparent border-b border-stone-300 focus:border-[var(--color-primary-500)] outline-none py-2 text-lg text-stone-800 transition-colors placeholder-stone-500"
                   placeholder="+1 (555) 555-5555"
                 />
               </div>
@@ -138,9 +159,9 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
                 <button
                   type="button"
                   onClick={() => setAttendance('yes')}
-                  className={`p-4 border rounded-xl flex flex-col items-center gap-3 transition-all duration-300 group ${attendance === 'yes' ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-md transform scale-[1.02]' : 'border-stone-200 hover:border-rose-300 text-stone-400 hover:text-stone-600'}`}
+                  className={`p-4 border rounded-xl flex flex-col items-center gap-3 transition-all duration-300 group ${attendance === 'yes' ? 'bg-[var(--color-primary-50)] border-[var(--color-primary-500)] text-[var(--color-primary-700)] shadow-md transform scale-[1.02]' : 'border-stone-200 hover:border-[var(--color-primary-300)] text-stone-400 hover:text-stone-600'}`}
                 >
-                  <div className={`p-2 rounded-full ${attendance === 'yes' ? 'bg-rose-100' : 'bg-stone-50 group-hover:bg-rose-50'} transition-colors`}>
+                  <div className={`p-2 rounded-full ${attendance === 'yes' ? 'bg-[var(--color-primary-100)]' : 'bg-stone-50 group-hover:bg-[var(--color-primary-50)]'} transition-colors`}>
                     <Check size={24} strokeWidth={2} />
                   </div>
                   <span className="text-sm font-bold font-sans">Joyfully<br />Accept</span>
@@ -170,7 +191,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
                 max="10"
                 defaultValue="1"
                 required={attendance === 'yes'}
-                className="w-full bg-transparent border-b border-stone-300 focus:border-rose-500 outline-none py-2 text-2xl text-stone-800 font-serif"
+                className="w-full bg-transparent border-b border-stone-300 focus:border-[var(--color-primary-500)] outline-none py-2 text-2xl text-stone-800 font-serif"
               />
             </div>
 
@@ -181,7 +202,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
               <textarea
                 name="message"
                 rows={3}
-                className="w-full bg-stone-50/50 rounded-xl border border-stone-200 focus:border-rose-500 outline-none p-4 text-stone-700 transition-colors mt-2 resize-none font-serif text-lg leading-relaxed placeholder-stone-500"
+                className="w-full bg-stone-50/50 rounded-xl border border-stone-200 focus:border-[var(--color-primary-500)] outline-none p-4 text-stone-700 transition-colors mt-2 resize-none font-serif text-lg leading-relaxed placeholder-stone-500"
                 placeholder="Dietary restrictions or best wishes..."
               ></textarea>
             </div>
