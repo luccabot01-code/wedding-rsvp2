@@ -100,7 +100,7 @@ export const RsvpForm: React.FC<RsvpFormProps> = ({ slug, coverImage, onSuccess 
               <div className="h-[1px] w-8 bg-stone-300"></div>
             </div>
             <p className="mt-4 text-stone-500 font-serif text-lg tracking-wider">
-              <span className="font-semibold" style={{ color: 'var(--color-primary-600)' }}>12</span>
+              <span className="font-semibold" style={{ color: 'var(--color-primary-600)' }}>18th</span>
               <span className="mx-2 text-stone-300">|</span>
               <span className="uppercase text-sm">September</span>
               <span className="mx-2 text-stone-300">|</span>
